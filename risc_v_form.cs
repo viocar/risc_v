@@ -45,8 +45,7 @@ namespace WindowsFormsApp1
         }
         bool use_reg_names = true; //which register names to use
         bool file_loaded_ok = false; //flipped when file loads
-        bool step_mode = false; //should we step once or run code?
-        string old_value = "0"; //this is used to restore the old value of a register if a new value is invalid
+        bool break_after_execution = false; //should we step once or run code?
         byte[] memory = new byte[MEMORY_SIZE]; //RAM
         uint[] registers = new uint[0x20]; //x0 through x31
         uint reg_pc = 0;
@@ -73,8 +72,12 @@ namespace WindowsFormsApp1
                 tbox.Text = Convert.ToString(0);
                 tbox.KeyDown += new KeyEventHandler(regbHandleInputPass);
                 tbox.LostFocus += new EventHandler(regbHandleInput);
+                tbox.Text = "00000000"; //I have it set to this in the editor but for some reason it resets to 0, so...
             }
-            regb_pc.Text = Convert.ToString(0);
+            regb_pc.Text = Convert.ToString(0); //PC is a special register, so I don't want it in the textboxes list
+            regb_pc.KeyDown += new KeyEventHandler(regbHandleInputPass);
+            regb_pc.LostFocus += new EventHandler(regbHandleInput);
+            regb_pc.Text = "00000000";
             textboxes.Reverse();
         }
         private void loadFile(object sender, EventArgs e)
@@ -105,7 +108,7 @@ namespace WindowsFormsApp1
                 Button code = sender as Button;
                 if (code.Name == "button_step") //for stepping later. right now, the buttons merely step and do not run
                 {
-                    step_mode = true;
+                    break_after_execution = true;
                 }
                 uint insn = BitConverter.ToUInt32(memory, (int)reg_pc);
                 executeInstruction(getParcel(insn));
@@ -153,11 +156,7 @@ namespace WindowsFormsApp1
                     return decodeInsn(insn, INSN_TYPE.FENCE);
                 case 0x73:
                     return decodeInsn(insn, INSN_TYPE.CSR);
-                //case 0:
-                //Console.WriteLine("NULL Instruction met. Terminating parsing.");
-                //break;
                 default:
-                    //Console.WriteLine("Instruction " + insn + " is not supported.");
                     return decodeInsn(insn, INSN_TYPE.INVALID);
             }
         }
@@ -207,7 +206,6 @@ namespace WindowsFormsApp1
             }
             else if (type == INSN_TYPE.J) //dumb
             {
-                //Console.WriteLine(Convert.ToString(insn, 16));
                 rd = insn >> 7 & 0x1F;
                 uint imm_c = insn >> 12;
                 uint imm_1912 = (imm_c & 0xFF) << 12;
@@ -220,8 +218,6 @@ namespace WindowsFormsApp1
                     imm_c = imm_c | 0xFFF80000;
                 }
                 imm32 = (int)imm_c;
-                Console.WriteLine(Convert.ToString(imm32, 16));
-                Console.WriteLine(Convert.ToString((insn >> 12), 16) + " " + Convert.ToString(imm_1912, 16) + " " + Convert.ToString(imm_11, 16) + " " + Convert.ToString(imm_101, 16) + " " + Convert.ToString(imm_20, 16));
             }
             else if (type == INSN_TYPE.FENCE)
             {
@@ -347,7 +343,8 @@ namespace WindowsFormsApp1
                     }
                     else
                     {
-                        Console.WriteLine("Attempted to access memory at 0x" + Convert.ToString(offset, 16) + ", maximum size is 0x" + Convert.ToString(MEMORY_SIZE, 16));
+                        illegalInstruction("Instruction at " + Convert.ToString(reg_pc, 16) + " attempted to access memory at 0x" + Convert.ToString(offset, 16) + ", maximum size is 0x" + Convert.ToString(MEMORY_SIZE, 16));
+                        //breakexecution
                     }
                     break;
                 case 0x67: //JALR
@@ -382,12 +379,65 @@ namespace WindowsFormsApp1
                     }
                     else
                     {
-                        Console.WriteLine("Attempted to access memory at 0x" + Convert.ToString(offset, 16) + ", maximum size is 0x" + Convert.ToString(MEMORY_SIZE, 16));
+                        illegalInstruction("Instruction at " + Convert.ToString(reg_pc, 16) + " attempted to access memory at 0x" + Convert.ToString(offset, 16) + ", maximum size is 0x" + Convert.ToString(MEMORY_SIZE, 16));
                     }
                     break;
                 case 0x63: //BEQ BNE BLT BGE BLTU BGEU
+                    if (funct3 == 0) //BEQ
+                    {
+                        if (op1 == op2)
+                        {
+                            jump_insn = true;
+                            updatePC(reg_pc + (uint)imm);
+                        }
+                    }
+                    else if (funct3 == 0x1) //BNE
+                    {
+                        if (op1 != op2)
+                        {
+                            jump_insn = true;
+                            updatePC(reg_pc + (uint)imm);
+                        }
+                    }
+                    else if (funct3 == 0x4) //BLT
+                    {
+                        if ((int)op1 < (int)op2)
+                        {
+                            jump_insn = true;
+                            updatePC(reg_pc + (uint)imm);
+                        }
+                    }
+                    else if (funct3 == 0x5) //BGE
+                    {
+                        if ((int)op1 >= (int)op2)
+                        {
+                            jump_insn = true;
+                            updatePC(reg_pc + (uint)imm);
+                        }
+                    }
+                    else if (funct3 == 0x6) //BLTU
+                    {
+                        if (op1 < op2)
+                        {
+                            jump_insn = true;
+                            updatePC(reg_pc + (uint)imm);
+                        }
+                    }
+                    else if (funct3 == 0x7) //BGEU
+                    {
+                        if (op1 >= op2)
+                        {
+                            jump_insn = true;
+                            updatePC(reg_pc + (uint)imm);
+                        }
+                    }
+                    break;
                 case 0x17: //AUIPC
+                    updateRegister(rd, (uint)(imm32 << 12) + reg_pc);
+                    break;
                 case 0x37: //LUI
+                    updateRegister(rd, (uint)imm32 << 12);
+                    break;
                 case 0x6F: //JAL
                     jump_insn = true;
                     updateRegister(rd, reg_pc + 4);
@@ -449,12 +499,12 @@ namespace WindowsFormsApp1
                     }
                     break;
                 case 0xF: //FENCE FENCE.I
-                case 0x73:
-                //case 0:
-                //Console.WriteLine("NULL Instruction met. Terminating parsing.");
-                //break;
+                case 0x73: //CSR stuff
+                case 0:
+                    illegalInstruction("Attempted to execute null instruction at " + Convert.ToString(reg_pc, 16));
+                    break;
                 default:
-                    //Console.WriteLine("Instruction " + insn + " is not supported.");
+                    illegalInstruction("Attempted to execute unsupported instruction at " + Convert.ToString(reg_pc, 16));
                     break;
             }
             if (!jump_insn)
@@ -883,7 +933,7 @@ namespace WindowsFormsApp1
             }
             else if (txt.Name == "regb_x0") //x0 is set to read only, but just in case...
             {
-                txt.Text = "0";
+                txt.Text = "00000000";
             }
             else if (txt.Name == "regb_pc") //PC must be divisible by 4 (RV32E not supported)
             {
@@ -927,6 +977,11 @@ namespace WindowsFormsApp1
                 Console.WriteLine("Attempted to jump to misaligned or out-of-range address.");
                 //breakexecution
             }
+        }
+        private void illegalInstruction(string message)
+        {
+            break_after_execution = true;
+            Console.WriteLine(message);
         }
         private uint signExtend(uint value, int size) //truncate a value to the selected size then sign extend it
         {
