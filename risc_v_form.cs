@@ -46,6 +46,7 @@ namespace WindowsFormsApp1
         bool use_reg_names = true; //which register names to use
         bool file_loaded_ok = false; //flipped when file loads
         bool break_after_execution = false; //should we step once or run code?
+        bool do_not_increment_pc = false; //should program counter be incremented as normal?
         byte[] memory = new byte[MEMORY_SIZE]; //RAM
         uint[] registers = new uint[0x20]; //x0 through x31
         uint reg_pc = 0;
@@ -60,6 +61,7 @@ namespace WindowsFormsApp1
             regb_x0.ReadOnly = true; //x0 must be 0
             button_loadprog.Click += new EventHandler(loadFile);
             button_step.Click += new EventHandler(runCode);
+            button_run.Click += new EventHandler(runCode);
             cbox_register_name.CheckedChanged += new EventHandler(cbox_register_name_CheckedChanged);
             foreach (Label lbl in grp_registers.Controls.OfType<Label>().Where(lbl => lbl.Name.StartsWith("lab_"))) //add labels to a single list
             {
@@ -78,6 +80,7 @@ namespace WindowsFormsApp1
             regb_pc.KeyDown += new KeyEventHandler(regbHandleInputPass);
             regb_pc.LostFocus += new EventHandler(regbHandleInput);
             regb_pc.Text = "00000000";
+            
             textboxes.Reverse();
         }
         private void loadFile(object sender, EventArgs e)
@@ -105,13 +108,20 @@ namespace WindowsFormsApp1
         {
             if (file_loaded_ok)
             {
+                break_after_execution = false;
+                uint old_pc = reg_pc; //the previous PC value is tracked for visual reasons
                 Button code = sender as Button;
-                if (code.Name == "button_step") //for stepping later. right now, the buttons merely step and do not run
+                while (!break_after_execution)
                 {
-                    break_after_execution = true;
+                    uint insn = BitConverter.ToUInt32(memory, (int)reg_pc);
+                    executeInstruction(getParcel(insn));
+                    if (code.Name == "button_step") //for stepping later. right now, the buttons merely step and do not run
+                    {
+                        break_after_execution = true;
+                    }
                 }
-                uint insn = BitConverter.ToUInt32(memory, (int)reg_pc);
-                executeInstruction(getParcel(insn));
+                updateVisualsPC(old_pc, reg_pc);
+                updateVisualsReg();
             }
         }
         private void parseInsnText()
@@ -251,7 +261,7 @@ namespace WindowsFormsApp1
             uint funct7 = parcel.funct7; short imm = parcel.imm; int imm32 = parcel.imm32; INSN_TYPE type = parcel.type;
             uint op1 = registers[rs1]; //deref rs1
             uint op2 = registers[rs2]; //deref rs2
-            bool jump_insn = false; //for J, B, and JALR instructions
+            do_not_increment_pc = false; //for J, B, and JALR instructions
             switch (opcode) //there are six instruction types. there's no easy way to know which is which beforehand, so use a switch statement to get the right one. should this be an if?
             {
                 case 0x33: //ADD SUB SLL SLT SLTU XOR XRL SRA OR AND
@@ -343,12 +353,12 @@ namespace WindowsFormsApp1
                     }
                     else
                     {
-                        illegalInstruction("Instruction at " + Convert.ToString(reg_pc, 16) + " attempted to access memory at 0x" + Convert.ToString(offset, 16) + ", maximum size is 0x" + Convert.ToString(MEMORY_SIZE, 16));
-                        //breakexecution
+                        illegalInstruction("Instruction at " + Convert.ToString(reg_pc, 16).ToUpper().PadLeft(4, '0') + " attempted to access memory at 0x" + Convert.ToString(offset, 16).ToUpper().PadLeft(4, '0') + ", maximum size is 0x" + Convert.ToString(MEMORY_SIZE, 16).ToUpper().PadLeft(4, '0'));
+
                     }
                     break;
                 case 0x67: //JALR
-                    jump_insn = true;
+                    do_not_increment_pc = true;
                     uint dest = (uint)(reg_pc + op1 + imm);
                     updateRegister(rd, dest);
                     updatePC(dest);
@@ -387,7 +397,7 @@ namespace WindowsFormsApp1
                     {
                         if (op1 == op2)
                         {
-                            jump_insn = true;
+                            do_not_increment_pc = true;
                             updatePC(reg_pc + (uint)imm);
                         }
                     }
@@ -395,7 +405,7 @@ namespace WindowsFormsApp1
                     {
                         if (op1 != op2)
                         {
-                            jump_insn = true;
+                            do_not_increment_pc = true;
                             updatePC(reg_pc + (uint)imm);
                         }
                     }
@@ -403,7 +413,7 @@ namespace WindowsFormsApp1
                     {
                         if ((int)op1 < (int)op2)
                         {
-                            jump_insn = true;
+                            do_not_increment_pc = true;
                             updatePC(reg_pc + (uint)imm);
                         }
                     }
@@ -411,7 +421,7 @@ namespace WindowsFormsApp1
                     {
                         if ((int)op1 >= (int)op2)
                         {
-                            jump_insn = true;
+                            do_not_increment_pc = true;
                             updatePC(reg_pc + (uint)imm);
                         }
                     }
@@ -419,7 +429,7 @@ namespace WindowsFormsApp1
                     {
                         if (op1 < op2)
                         {
-                            jump_insn = true;
+                            do_not_increment_pc = true;
                             updatePC(reg_pc + (uint)imm);
                         }
                     }
@@ -427,7 +437,7 @@ namespace WindowsFormsApp1
                     {
                         if (op1 >= op2)
                         {
-                            jump_insn = true;
+                            do_not_increment_pc = true;
                             updatePC(reg_pc + (uint)imm);
                         }
                     }
@@ -439,7 +449,7 @@ namespace WindowsFormsApp1
                     updateRegister(rd, (uint)imm32 << 12);
                     break;
                 case 0x6F: //JAL
-                    jump_insn = true;
+                    do_not_increment_pc = true;
                     updateRegister(rd, reg_pc + 4);
                     updatePC((uint)imm32);
                     break;
@@ -501,14 +511,15 @@ namespace WindowsFormsApp1
                 case 0xF: //FENCE FENCE.I
                 case 0x73: //CSR stuff
                 case 0:
-                    illegalInstruction("Attempted to execute null instruction at " + Convert.ToString(reg_pc, 16));
+                    illegalInstruction("Attempted to execute null instruction at " + Convert.ToString(reg_pc, 16).ToUpper().PadLeft(4, '0'));
                     break;
                 default:
-                    illegalInstruction("Attempted to execute unsupported instruction at " + Convert.ToString(reg_pc, 16));
+                    illegalInstruction("Attempted to execute unsupported instruction at " + Convert.ToString(reg_pc, 16).ToUpper().PadLeft(4, '0'));
                     break;
             }
-            if (!jump_insn)
+            if (!do_not_increment_pc)
             {
+                Console.WriteLine(opcode);
                 updatePC(reg_pc + 0x4);
             }
         }
@@ -939,6 +950,7 @@ namespace WindowsFormsApp1
             {
                 if (data_value % 4 == 0 && data_value < MEMORY_SIZE)
                 {
+                    updateVisualsPC(reg_pc, data_value);
                     updatePC(data_value);
                 }
                 else
@@ -957,20 +969,13 @@ namespace WindowsFormsApp1
             if (rd != 0)
             {
                 registers[rd] = val;
-                textboxes[rd].Text = Convert.ToString((val & 0xFFFFFFFF), 16).ToUpper().PadLeft(8, '0');
             }
         }
         private void updatePC(uint new_pc)
         {
             if (new_pc % 4 == 0 && new_pc < MEMORY_SIZE)
             {
-                insn_list[(int)reg_pc / 4] = insn_list[(int)reg_pc / 4].Remove(4, 1).Insert(4, " "); //update the insn_list without rebuilding the whole thing
-                insn_list[(int)new_pc / 4] = insn_list[(int)new_pc / 4].Remove(4, 1).Insert(4, "●");
-                listbox_insns.DataSource = null;
-                listbox_insns.DisplayMember = "";
-                listbox_insns.DataSource = insn_list;
                 reg_pc = new_pc;
-                regb_pc.Text = Convert.ToString(new_pc, 16).ToUpper().PadLeft(8, '0'); //"should" this be reg_pc instead? I know it makes no difference execution-wise but, you know
             }
             else
             {
@@ -978,9 +983,27 @@ namespace WindowsFormsApp1
                 //breakexecution
             }
         }
+        private void updateVisualsPC(uint old_pc, uint new_pc) //updating visuals every instruction is a bad idea for run mode. let's move them to their own function that can be run when execution stops
+        {
+            insn_list[(int)old_pc / 4] = insn_list[(int)old_pc / 4].Remove(4, 1).Insert(4, " "); //update the insn_list without rebuilding the whole thing
+            insn_list[(int)new_pc / 4] = insn_list[(int)new_pc / 4].Remove(4, 1).Insert(4, "●");
+            listbox_insns.DataSource = null;
+            listbox_insns.DisplayMember = "";
+            listbox_insns.DataSource = insn_list;
+            listbox_insns.SelectedIndex = (int)new_pc / 4;
+            regb_pc.Text = Convert.ToString(new_pc, 16).ToUpper().PadLeft(8, '0'); //"should" this be reg_pc instead? I know it makes no difference execution-wise but, you know
+        }
+        private void updateVisualsReg()
+        {
+            for (int i = 0; i < textboxes.Count; i++)
+            {
+                textboxes[i].Text = Convert.ToString((registers[i] & 0xFFFFFFFF), 16).ToUpper().PadLeft(8, '0');
+            }
+        }
         private void illegalInstruction(string message)
         {
             break_after_execution = true;
+            do_not_increment_pc = true;
             Console.WriteLine(message);
         }
         private uint signExtend(uint value, int size) //truncate a value to the selected size then sign extend it
