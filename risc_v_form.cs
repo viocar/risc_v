@@ -5,9 +5,9 @@ using System.Data;
 using System.Drawing;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.IO;
+using System.Threading;
 
 namespace WindowsFormsApp1
 {
@@ -58,11 +58,6 @@ namespace WindowsFormsApp1
         public risc_v()
         {
             InitializeComponent();
-            regb_x0.ReadOnly = true; //x0 must be 0
-            button_loadprog.Click += new EventHandler(loadFile);
-            button_step.Click += new EventHandler(runCode);
-            button_run.Click += new EventHandler(runCode);
-            cbox_register_name.CheckedChanged += new EventHandler(cbox_register_name_CheckedChanged);
             foreach (Label lbl in grp_registers.Controls.OfType<Label>().Where(lbl => lbl.Name.StartsWith("lab_"))) //add labels to a single list
             {
                 labels.Add(lbl);
@@ -76,20 +71,26 @@ namespace WindowsFormsApp1
                 tbox.LostFocus += new EventHandler(regbHandleInput);
                 tbox.Text = "00000000"; //I have it set to this in the editor but for some reason it resets to 0, so...
             }
+            textboxes.Reverse();
+            regb_x0.ReadOnly = true; //x0 must be 0
+            button_loadprog.Click += new EventHandler(loadFile);
+            button_step.Click += new EventHandler(runCode);
+            button_run.Click += new EventHandler(runCode);
+            cbox_register_name.CheckedChanged += new EventHandler(cbox_register_name_CheckedChanged);
             regb_pc.Text = Convert.ToString(0); //PC is a special register, so I don't want it in the textboxes list
             regb_pc.KeyDown += new KeyEventHandler(regbHandleInputPass);
             regb_pc.LostFocus += new EventHandler(regbHandleInput);
             regb_pc.Text = "00000000";
             
-            textboxes.Reverse();
         }
         private void loadFile(object sender, EventArgs e)
         {
+            file_loaded_ok = false;
             OpenFileDialog loadFileDialog = new OpenFileDialog
             {
                 Filter = "rv File|*.rv",
                 Title = "Select a .rv File",
-                InitialDirectory = "D:\\Program Files\\RISC-V\\assembler\\"
+                InitialDirectory = "D:\\Program Files\\RISC-V\\assembler\\" //unhardcode later
             };
             if (loadFileDialog.ShowDialog() == DialogResult.OK)
             {
@@ -111,13 +112,17 @@ namespace WindowsFormsApp1
                 break_after_execution = false;
                 uint old_pc = reg_pc; //the previous PC value is tracked for visual reasons
                 Button code = sender as Button;
-                while (!break_after_execution)
+                if (code.Name == "button_step") //for stepping later. right now, the buttons merely step and do not run
                 {
                     uint insn = BitConverter.ToUInt32(memory, (int)reg_pc);
                     executeInstruction(getParcel(insn));
-                    if (code.Name == "button_step") //for stepping later. right now, the buttons merely step and do not run
+                }
+                else if (code.Name == "button_run")
+                {
+                    while (!break_after_execution)
                     {
-                        break_after_execution = true;
+                        uint insn = BitConverter.ToUInt32(memory, (int)reg_pc);
+                        executeInstruction(getParcel(insn));
                     }
                 }
                 updateVisualsPC(old_pc, reg_pc);
@@ -244,15 +249,8 @@ namespace WindowsFormsApp1
             {
                 //nothing, but leaving the field in case I need it
             }
-            parcel.opcode = opcode; //again, this feels ugly to me
-            parcel.type = type;
-            parcel.rd = rd;
-            parcel.rs1 = rs1;
-            parcel.rs2 = rs2;
-            parcel.funct3 = funct3;
-            parcel.funct7 = funct7;
-            parcel.imm = imm;
-            parcel.imm32 = imm32;
+            parcel.opcode = opcode; parcel.type = type; parcel.rd = rd; parcel.rs1 = rs1; parcel.rs2 = rs2; //again, this feels ugly to me
+            parcel.funct3 = funct3;  parcel.funct7 = funct7; parcel.imm = imm; parcel.imm32 = imm32;
             return parcel;
         }
         private void executeInstruction(insn_parcel parcel)
@@ -519,7 +517,6 @@ namespace WindowsFormsApp1
             }
             if (!do_not_increment_pc)
             {
-                Console.WriteLine(opcode);
                 updatePC(reg_pc + 0x4);
             }
         }
@@ -556,7 +553,7 @@ namespace WindowsFormsApp1
                             insn_name = "srli";
                         }
                     }
-                    operands = reg_names[rd] + ", " + reg_names[rs1] + ", 0x" + Convert.ToString(rs2, 16); //probably doesn't need to be in hex, but for consistency's sake, I'm doing it
+                    operands = reg_names[rd] + ", " + reg_names[rs1] + ", 0x" + Convert.ToString(rs2, 16).ToUpper(); //probably doesn't need to be in hex, but for consistency's sake, I'm doing it
                 }
                 else if (opcode == 0x33) //ADD SUB SLL SLT SLTU XOR SRL SRA OR AND
                 {
@@ -858,7 +855,6 @@ namespace WindowsFormsApp1
             }
             insn_list.Add((Convert.ToString((insn_list.Count() * 4), 16).ToUpper().PadLeft(4, '0') + pc_ind +
                                     Convert.ToString(insn, 16).ToUpper().PadLeft(8, '0') + " " + insn_name.PadRight(8, ' ') + " " + operands));
-            //Console.WriteLine(insn_name + " " + operands);
         }
         private void createMemoryList()
         {
@@ -922,9 +918,16 @@ namespace WindowsFormsApp1
         private void initializeFields()
         {
             Array.Clear(memory, 0, (int)MEMORY_SIZE);
+            Array.Clear(registers, 0, 0x20); //probably not a risk to hardcode this value since it's not like it's going to magically grow new registers
             insn_list.Clear();
             listbox_insns.DataSource = null;
             listbox_memory.DataSource = null;
+            reg_pc = 0;
+            regb_pc.Text = "00000000";
+            for (int i = 0; i < textboxes.Count; i++)
+            {
+                textboxes[i].Text = "00000000";
+            }
         }
         private void regbHandleInputPass(object sender, KeyEventArgs e) //this function just passes the sender along to the main one. it needs to be different due to KeyEventArgs
         {
@@ -979,8 +982,7 @@ namespace WindowsFormsApp1
             }
             else
             {
-                Console.WriteLine("Attempted to jump to misaligned or out-of-range address.");
-                //breakexecution
+                illegalInstruction("Attempted to jump to misaligned or out-of-range address.");
             }
         }
         private void updateVisualsPC(uint old_pc, uint new_pc) //updating visuals every instruction is a bad idea for run mode. let's move them to their own function that can be run when execution stops
@@ -1004,11 +1006,10 @@ namespace WindowsFormsApp1
         {
             break_after_execution = true;
             do_not_increment_pc = true;
-            Console.WriteLine(message);
+            Console.WriteLine(message); //change this to a non-console display later
         }
         private uint signExtend(uint value, int size) //truncate a value to the selected size then sign extend it
         {
-            Console.WriteLine(size);
             if (size == 8)
             {
                 if ((value & 0x80) != 0)
