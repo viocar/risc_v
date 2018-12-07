@@ -102,6 +102,7 @@
             this.cbox_register_name = new System.Windows.Forms.CheckBox();
             this.button_step = new System.Windows.Forms.Button();
             this.button_run = new System.Windows.Forms.Button();
+            this.bgw_code = new System.ComponentModel.BackgroundWorker();
             this.grp_registers.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -870,8 +871,13 @@
             this.button_run.Name = "button_run";
             this.button_run.Size = new System.Drawing.Size(91, 23);
             this.button_run.TabIndex = 7;
+            this.button_run.Tag = "0";
             this.button_run.Text = "Run";
             this.button_run.UseVisualStyleBackColor = true;
+            // 
+            // bgw_code
+            // 
+            this.bgw_code.WorkerSupportsCancellation = true;
             // 
             // risc_v
             // 
@@ -971,6 +977,7 @@
         private System.Windows.Forms.CheckBox cbox_register_name;
         private System.Windows.Forms.Button button_step;
         private System.Windows.Forms.Button button_run;
+        private System.ComponentModel.BackgroundWorker bgw_code;
     }
 }
 

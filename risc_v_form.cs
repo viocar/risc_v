@@ -8,13 +8,16 @@ using System.Text;
 using System.Windows.Forms;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace WindowsFormsApp1
 {
     public partial class risc_v : Form
     {
+        //ENUMS AND STRUCTS
         public enum INSN_TYPE
         {
+            //RV32I
             R, //0
             I, //1
             S, //2
@@ -23,18 +26,12 @@ namespace WindowsFormsApp1
             J, //5
             FENCE, //6
             CSR, //7
-            INVALID
+            INVALID //8, I guess
         };
-        const uint MEMORY_SIZE = 0x4000;
-        //I could do REGISTER_NUMBERS dynamically by doing something like "x" + the number but this is more straightforward
-        public static readonly string[] REGISTER_NAMES = {  "zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2", "s0", "s1", "a0", "a1", "a2", "a3", "a4", "a5",
-                                                            "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6"};
-        public static readonly string[] REGISTER_NUMBERS = {"x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16",
-                                                            "x17", "x18", "x19", "x20", "x21", "x22", "x23", "x24", "x25", "x26", "x27", "x28", "x29", "x30", "x31"};
         public struct insn_parcel
         {
             public uint opcode;
-            public INSN_TYPE type;
+            public INSN_TYPE type; //don't think I need this one
             public uint rd;
             public uint rs1;
             public uint rs2;
@@ -42,21 +39,35 @@ namespace WindowsFormsApp1
             public uint funct7;
             public short imm;
             public int imm32;
-        }
+        } //why does an enum need a semicolon here but a struct doesn't
+        //CONSTANTS
+        const uint MEMORY_SIZE = 0x4000;
+        //I could do REGISTER_NUMBERS dynamically by doing something like "x" + the number but this is more straightforward
+        public static readonly string[] REGISTER_NAMES = {  "zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2", "s0", "s1", "a0", "a1", "a2", "a3", "a4", "a5",
+                                                            "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6"};
+        public static readonly string[] REGISTER_NUMBERS = {"x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16",
+                                                            "x17", "x18", "x19", "x20", "x21", "x22", "x23", "x24", "x25", "x26", "x27", "x28", "x29", "x30", "x31"};
+
+        //PROGRAM STATES
         bool use_reg_names = true; //which register names to use
         bool file_loaded_ok = false; //flipped when file loads
         bool break_after_execution = false; //should we step once or run code?
         bool do_not_increment_pc = false; //should program counter be incremented as normal?
+        bool code_running = false; //is our code running?
         byte[] memory = new byte[MEMORY_SIZE]; //RAM
         uint[] registers = new uint[0x20]; //x0 through x31
-        uint reg_pc = 0;
+        uint old_pc = 0; //the previous PC value is tracked for visual reasons and it's in the global space because I can't code properly I guess
+        uint reg_pc = 0; //pc register, which is not part of the normal registers array
+        string[] reg_names; //tracks which registers names we're using
+
+        //LISTS
         List<string> insn_list = new List<string>(); //holds the instruction listings
         List<String> mem_list = new List<String>();
         List<Label> labels = new List<Label>(); //contains the register labels
         List<TextBox> textboxes = new List<TextBox>(); //contains the register values
-        string[] reg_names;
         public risc_v()
         {
+            //INITIALIZATIONS
             InitializeComponent();
             foreach (Label lbl in grp_registers.Controls.OfType<Label>().Where(lbl => lbl.Name.StartsWith("lab_"))) //add labels to a single list
             {
@@ -72,15 +83,18 @@ namespace WindowsFormsApp1
                 tbox.Text = "00000000"; //I have it set to this in the editor but for some reason it resets to 0, so...
             }
             textboxes.Reverse();
+            regb_pc.Text = "00000000";
             regb_x0.ReadOnly = true; //x0 must be 0
+
+            //EVENT HANDLERS
+            regb_pc.KeyDown += new KeyEventHandler(regbHandleInputPass);
+            regb_pc.LostFocus += new EventHandler(regbHandleInput);
             button_loadprog.Click += new EventHandler(loadFile);
             button_step.Click += new EventHandler(runCode);
             button_run.Click += new EventHandler(runCode);
+            bgw_code.DoWork += new DoWorkEventHandler(runCodeBackground);
+            bgw_code.RunWorkerCompleted += new RunWorkerCompletedEventHandler(runCodeBackgroundCompleted);
             cbox_register_name.CheckedChanged += new EventHandler(cbox_register_name_CheckedChanged);
-            regb_pc.Text = Convert.ToString(0); //PC is a special register, so I don't want it in the textboxes list
-            regb_pc.KeyDown += new KeyEventHandler(regbHandleInputPass);
-            regb_pc.LostFocus += new EventHandler(regbHandleInput);
-            regb_pc.Text = "00000000";
             
         }
         private void loadFile(object sender, EventArgs e)
@@ -105,29 +119,55 @@ namespace WindowsFormsApp1
                 }
             }
         }
-        private void runCode(object sender, EventArgs e) //don't think I actually need these args but hey.
+        private void runCode(object sender, EventArgs e) //this function has a clarity issue, where it's being used for two different things. should improve this later.
         {
             if (file_loaded_ok)
             {
-                break_after_execution = false;
-                uint old_pc = reg_pc; //the previous PC value is tracked for visual reasons
                 Button code = sender as Button;
                 if (code.Name == "button_step") //for stepping later. right now, the buttons merely step and do not run
+                {
+                    break_after_execution = true;
+                }
+                else if (code.Name == "button_run")
+                {
+                    if (code_running) //acting as stop button
+                    {
+                        break_after_execution = true;
+                    }
+                    else //acting as run button
+                    {
+                        break_after_execution = false;
+                    }
+                }
+                if (!bgw_code.IsBusy)
+                {
+                    codeRunningStateChange();
+                    bgw_code.RunWorkerAsync();
+                }
+            }
+        }
+        private void runCodeBackground(object sender, DoWorkEventArgs e) //this is what's called when bgw_code.RunWorkerAsync() fires
+        {
+            old_pc = reg_pc;
+            if (break_after_execution)
+            {
+                uint insn = BitConverter.ToUInt32(memory, (int)reg_pc);
+                executeInstruction(getParcel(insn));
+            }
+            else
+            {
+                while (!break_after_execution)
                 {
                     uint insn = BitConverter.ToUInt32(memory, (int)reg_pc);
                     executeInstruction(getParcel(insn));
                 }
-                else if (code.Name == "button_run")
-                {
-                    while (!break_after_execution)
-                    {
-                        uint insn = BitConverter.ToUInt32(memory, (int)reg_pc);
-                        executeInstruction(getParcel(insn));
-                    }
-                }
-                updateVisualsPC(old_pc, reg_pc);
-                updateVisualsReg();
             }
+        }
+        private void runCodeBackgroundCompleted(object sender, RunWorkerCompletedEventArgs e)
+        {
+            codeRunningStateChange();
+            updateVisualsPC(old_pc, reg_pc);
+            updateVisualsReg();
         }
         private void parseInsnText()
         {
@@ -137,7 +177,6 @@ namespace WindowsFormsApp1
                 getInsnText(insn, x, getParcel(insn));
             }
             listbox_insns.DataSource = insn_list;
-            listbox_insns.DisplayMember = "Item2"; //show the insn
         }
         private insn_parcel getParcel(uint insn) //getParcel and decodeInsn should probably be the same function, but I've split them to make the parts easier to change and update and totally not because I architected my program wrong
         {
@@ -1000,6 +1039,25 @@ namespace WindowsFormsApp1
             for (int i = 0; i < textboxes.Count; i++)
             {
                 textboxes[i].Text = Convert.ToString((registers[i] & 0xFFFFFFFF), 16).ToUpper().PadLeft(8, '0');
+            }
+        }
+        private void codeRunningStateChange() //lock the textboxes
+        {
+            code_running = !code_running;
+            button_loadprog.Enabled = !button_loadprog.Enabled;
+            button_step.Enabled = !button_step.Enabled;
+            if (code_running)
+            {
+                button_run.Text = "Stop";
+            }
+            else
+            {
+                button_run.Text = "Run";
+            }
+            regb_pc.ReadOnly = !regb_pc.ReadOnly;
+            for (int i = 1; i < textboxes.Count; i++) //i = 1 because we're not touching x0
+            {
+                textboxes[i].ReadOnly = !textboxes[i].ReadOnly;
             }
         }
         private void illegalInstruction(string message)
