@@ -103,6 +103,11 @@
             this.button_step = new System.Windows.Forms.Button();
             this.button_run = new System.Windows.Forms.Button();
             this.bgw_code = new System.ComponentModel.BackgroundWorker();
+            this.button_poke = new System.Windows.Forms.Button();
+            this.poke_value = new System.Windows.Forms.TextBox();
+            this.poke_addr = new System.Windows.Forms.TextBox();
+            this.lab_addr = new System.Windows.Forms.Label();
+            this.lab_value = new System.Windows.Forms.Label();
             this.grp_registers.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -849,7 +854,7 @@
             this.cbox_register_name.AutoSize = true;
             this.cbox_register_name.Checked = true;
             this.cbox_register_name.CheckState = System.Windows.Forms.CheckState.Checked;
-            this.cbox_register_name.Location = new System.Drawing.Point(801, 98);
+            this.cbox_register_name.Location = new System.Drawing.Point(802, 98);
             this.cbox_register_name.Name = "cbox_register_name";
             this.cbox_register_name.Size = new System.Drawing.Size(99, 17);
             this.cbox_register_name.TabIndex = 5;
@@ -879,11 +884,62 @@
             // 
             this.bgw_code.WorkerSupportsCancellation = true;
             // 
+            // button_poke
+            // 
+            this.button_poke.Location = new System.Drawing.Point(802, 638);
+            this.button_poke.Name = "button_poke";
+            this.button_poke.Size = new System.Drawing.Size(91, 23);
+            this.button_poke.TabIndex = 8;
+            this.button_poke.Tag = "0";
+            this.button_poke.Text = "Poke memory";
+            this.button_poke.UseVisualStyleBackColor = true;
+            // 
+            // poke_value
+            // 
+            this.poke_value.Font = new System.Drawing.Font("Courier New", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.poke_value.Location = new System.Drawing.Point(817, 610);
+            this.poke_value.Name = "poke_value";
+            this.poke_value.Size = new System.Drawing.Size(76, 22);
+            this.poke_value.TabIndex = 66;
+            this.poke_value.Text = "00000000";
+            // 
+            // poke_addr
+            // 
+            this.poke_addr.Font = new System.Drawing.Font("Courier New", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.poke_addr.Location = new System.Drawing.Point(817, 582);
+            this.poke_addr.Name = "poke_addr";
+            this.poke_addr.Size = new System.Drawing.Size(76, 22);
+            this.poke_addr.TabIndex = 67;
+            this.poke_addr.Text = "00000000";
+            // 
+            // lab_addr
+            // 
+            this.lab_addr.AutoSize = true;
+            this.lab_addr.Location = new System.Drawing.Point(802, 586);
+            this.lab_addr.Name = "lab_addr";
+            this.lab_addr.Size = new System.Drawing.Size(14, 13);
+            this.lab_addr.TabIndex = 68;
+            this.lab_addr.Text = "A";
+            // 
+            // lab_value
+            // 
+            this.lab_value.AutoSize = true;
+            this.lab_value.Location = new System.Drawing.Point(802, 614);
+            this.lab_value.Name = "lab_value";
+            this.lab_value.Size = new System.Drawing.Size(14, 13);
+            this.lab_value.TabIndex = 69;
+            this.lab_value.Text = "V";
+            // 
             // risc_v
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(897, 670);
+            this.Controls.Add(this.lab_value);
+            this.Controls.Add(this.lab_addr);
+            this.Controls.Add(this.poke_addr);
+            this.Controls.Add(this.poke_value);
+            this.Controls.Add(this.button_poke);
             this.Controls.Add(this.button_run);
             this.Controls.Add(this.button_step);
             this.Controls.Add(this.cbox_register_name);
@@ -978,6 +1034,11 @@
         private System.Windows.Forms.Button button_step;
         private System.Windows.Forms.Button button_run;
         private System.ComponentModel.BackgroundWorker bgw_code;
+        private System.Windows.Forms.Button button_poke;
+        private System.Windows.Forms.TextBox poke_value;
+        private System.Windows.Forms.TextBox poke_addr;
+        private System.Windows.Forms.Label lab_addr;
+        private System.Windows.Forms.Label lab_value;
     }
 }
 

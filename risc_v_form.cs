@@ -92,6 +92,7 @@ namespace WindowsFormsApp1
             button_loadprog.Click += new EventHandler(loadFile);
             button_step.Click += new EventHandler(runCode);
             button_run.Click += new EventHandler(runCode);
+            button_poke.Click += new EventHandler(pokeMemory);
             bgw_code.DoWork += new DoWorkEventHandler(runCodeBackground);
             bgw_code.RunWorkerCompleted += new RunWorkerCompletedEventHandler(runCodeBackgroundCompleted);
             cbox_register_name.CheckedChanged += new EventHandler(cbox_register_name_CheckedChanged);
@@ -391,7 +392,6 @@ namespace WindowsFormsApp1
                     else
                     {
                         illegalInstruction("Instruction at " + Convert.ToString(reg_pc, 16).ToUpper().PadLeft(4, '0') + " attempted to access memory at 0x" + Convert.ToString(offset, 16).ToUpper().PadLeft(4, '0') + ", maximum size is 0x" + Convert.ToString(MEMORY_SIZE, 16).ToUpper().PadLeft(4, '0'));
-
                     }
                     break;
                 case 0x67: //JALR
@@ -913,7 +913,7 @@ namespace WindowsFormsApp1
             }
             listbox_memory.DataSource = mem_list;
         }
-        private void updateMemoryList(uint offset, uint size)
+        private void updateMemoryList(uint offset, uint size) //mmmm, this is probably going to need to handle updating the instructions list too
         {
             int memory_row = (int)(offset / 16) * 16; //the division acts as rounding in this case
             string values = "";
@@ -1004,6 +1004,38 @@ namespace WindowsFormsApp1
             {
                 registers[rd] = data_value;
                 txt.Text = Convert.ToString(data_value, 16).ToUpper().PadLeft(8, '0');
+            }
+        }
+        private void pokeMemory(object sender, EventArgs e)
+        {
+
+            uint offset;
+            uint val;
+            if (uint.TryParse(poke_addr.Text, System.Globalization.NumberStyles.HexNumber, null, out offset) & 
+                uint.TryParse(poke_value.Text, System.Globalization.NumberStyles.HexNumber, null, out val))
+            {
+                if (offset < MEMORY_SIZE) //NOTE: does not consider the length of val, which will crash if you try to poke the last memory address. fix this later!
+                {
+                    if ((byte)val == val) //value entered was 8-bit
+                    {
+                        memory[offset] = (byte)val;
+                        updateMemoryList(offset, 1);
+                    }
+                    else if ((ushort)val == val) //value entered was 16-bit
+                    {
+                        memory[offset] = (byte)(val & 0xFF);
+                        memory[offset + 1] = (byte)((val & 0xFF00) >> 8);
+                        updateMemoryList(offset, 2);
+                    }
+                    else
+                    {
+                        memory[offset] = (byte)(val & 0xFF);
+                        memory[offset + 1] = (byte)((val & 0xFF00) >> 8);
+                        memory[offset + 2] = (byte)((val & 0xFF0000) >> 16);
+                        memory[offset + 3] = (byte)((val & 0xFF000000) >> 24);
+                        updateMemoryList(offset, 4);
+                    }
+                }
             }
         }
         private void updateRegister(int rd, uint val) //just a helper function so that I don't fuck things up
