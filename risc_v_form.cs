@@ -1008,32 +1008,34 @@ namespace WindowsFormsApp1
         }
         private void pokeMemory(object sender, EventArgs e)
         {
-
-            uint offset;
-            uint val;
-            if (uint.TryParse(poke_addr.Text, System.Globalization.NumberStyles.HexNumber, null, out offset) & 
-                uint.TryParse(poke_value.Text, System.Globalization.NumberStyles.HexNumber, null, out val))
+            if (file_loaded_ok)
             {
-                if (offset < MEMORY_SIZE) //NOTE: does not consider the length of val, which will crash if you try to poke the last memory address. fix this later!
+                uint offset;
+                uint val;
+                if (uint.TryParse(poke_addr.Text, System.Globalization.NumberStyles.HexNumber, null, out offset) &
+                    uint.TryParse(poke_value.Text, System.Globalization.NumberStyles.HexNumber, null, out val))
                 {
-                    if ((byte)val == val) //value entered was 8-bit
+                    if (offset < MEMORY_SIZE) //NOTE: does not consider the length of val, which will crash if you try to poke the last memory address. fix this later!
                     {
-                        memory[offset] = (byte)val;
-                        updateMemoryList(offset, 1);
-                    }
-                    else if ((ushort)val == val) //value entered was 16-bit
-                    {
-                        memory[offset] = (byte)(val & 0xFF);
-                        memory[offset + 1] = (byte)((val & 0xFF00) >> 8);
-                        updateMemoryList(offset, 2);
-                    }
-                    else
-                    {
-                        memory[offset] = (byte)(val & 0xFF);
-                        memory[offset + 1] = (byte)((val & 0xFF00) >> 8);
-                        memory[offset + 2] = (byte)((val & 0xFF0000) >> 16);
-                        memory[offset + 3] = (byte)((val & 0xFF000000) >> 24);
-                        updateMemoryList(offset, 4);
+                        if ((byte)val == val) //value entered was 8-bit
+                        {
+                            memory[offset] = (byte)val;
+                            updateMemoryList(offset, 1);
+                        }
+                        else if ((ushort)val == val) //value entered was 16-bit
+                        {
+                            memory[offset] = (byte)(val & 0xFF);
+                            memory[offset + 1] = (byte)((val & 0xFF00) >> 8);
+                            updateMemoryList(offset, 2);
+                        }
+                        else
+                        {
+                            memory[offset] = (byte)(val & 0xFF);
+                            memory[offset + 1] = (byte)((val & 0xFF00) >> 8);
+                            memory[offset + 2] = (byte)((val & 0xFF0000) >> 16);
+                            memory[offset + 3] = (byte)((val & 0xFF000000) >> 24);
+                            updateMemoryList(offset, 4);
+                        }
                     }
                 }
             }
