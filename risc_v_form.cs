@@ -9,6 +9,7 @@ using System.Windows.Forms;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Timers;
 
 namespace WindowsFormsApp1
 {
@@ -40,8 +41,10 @@ namespace WindowsFormsApp1
             public short imm;
             public int imm32;
         } //why does an enum need a semicolon here but a struct doesn't
-        //CONSTANTS
+        //CONSTANTS AND COLOURS
         const uint MEMORY_SIZE = 0x4000;
+        Color LIGHT_GREEN = Color.FromArgb(0xC9, 0xFD, 0xC9);
+        Color LIGHT_RED = Color.FromArgb(0xFF, 0xCC, 0xCC);
         //I could do REGISTER_NUMBERS dynamically by doing something like "x" + the number but this is more straightforward
         public static readonly string[] REGISTER_NAMES = {  "zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2", "s0", "s1", "a0", "a1", "a2", "a3", "a4", "a5",
                                                             "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6"};
@@ -59,6 +62,12 @@ namespace WindowsFormsApp1
         uint old_pc = 0; //the previous PC value is tracked for visual reasons and it's in the global space because I can't code properly I guess
         uint reg_pc = 0; //pc register, which is not part of the normal registers array
         string[] reg_names; //tracks which registers names we're using
+
+        //UI MESSAGE GLOBALS - this is probably a bad way to do it :/
+        System.Timers.Timer ui_timer = new System.Timers.Timer(); //a timer that handles updating the UI for certain events
+        string message_string; //string to pass along to the message UI
+        Color message_colour; //the colour
+        bool message_waiting = false; //should this whole thing be a struct?
 
         //LISTS
         List<string> insn_list = new List<string>(); //holds the instruction listings
@@ -117,6 +126,7 @@ namespace WindowsFormsApp1
                     parseInsnText(); //parse the first instruction
                     createMemoryList();
                     file_loaded_ok = true;
+                    updateUIBar("File loaded successfully.", LIGHT_GREEN);
                 }
             }
         }
@@ -137,6 +147,7 @@ namespace WindowsFormsApp1
                     }
                     else //acting as run button
                     {
+                        updateUIBar("Code running...", LIGHT_GREEN);
                         break_after_execution = false;
                     }
                 }
@@ -147,7 +158,7 @@ namespace WindowsFormsApp1
                 }
             }
         }
-        private void runCodeBackground(object sender, DoWorkEventArgs e) //this is what's called when bgw_code.RunWorkerAsync() fires
+        private void runCodeBackground(object sender, DoWorkEventArgs e) //this is what's called when bgw_code.RunWorkerAsync() fires. it runs on the other thread.
         {
             old_pc = reg_pc;
             if (break_after_execution)
@@ -169,13 +180,18 @@ namespace WindowsFormsApp1
             codeRunningStateChange();
             updateVisualsPC(old_pc, reg_pc);
             updateVisualsReg();
+            if (message_waiting)
+            {
+                updateUIBar(message_string, message_colour);
+                message_waiting = false;
+            }
         }
         private void parseInsnText()
         {
             for (int x = 0; x < MEMORY_SIZE / 4; x++) //TODO: Move the for loop to another function so I can modify individual instructions without re-reading all memory
             {
                 uint insn = BitConverter.ToUInt32(memory, (x * 4));
-                getInsnText(insn, x, getParcel(insn));
+                insn_list.Add(getInsnText(insn, x, getParcel(insn)));
             }
             listbox_insns.DataSource = insn_list;
         }
@@ -548,10 +564,10 @@ namespace WindowsFormsApp1
                 case 0xF: //FENCE FENCE.I
                 case 0x73: //CSR stuff
                 case 0:
-                    illegalInstruction("Attempted to execute null instruction at " + Convert.ToString(reg_pc, 16).ToUpper().PadLeft(4, '0'));
+                    illegalInstruction("Attempted to execute null instruction at 0x" + Convert.ToString(reg_pc, 16).ToUpper().PadLeft(4, '0'));
                     break;
                 default:
-                    illegalInstruction("Attempted to execute unsupported instruction at " + Convert.ToString(reg_pc, 16).ToUpper().PadLeft(4, '0'));
+                    illegalInstruction("Attempted to execute unsupported instruction at 0x" + Convert.ToString(reg_pc, 16).ToUpper().PadLeft(4, '0'));
                     break;
             }
             if (!do_not_increment_pc)
@@ -559,7 +575,7 @@ namespace WindowsFormsApp1
                 updatePC(reg_pc + 0x4);
             }
         }
-        private void getInsnText(uint insn, int offset, insn_parcel parcel)
+        private string getInsnText(uint insn, int offset, insn_parcel parcel)
         {
             string insn_name = "DEFAULT"; //all will have an instruction name
             string operands = "OPERANDS NOT SET";
@@ -892,7 +908,7 @@ namespace WindowsFormsApp1
             {
                 pc_ind = "●";
             }
-            insn_list.Add((Convert.ToString((insn_list.Count() * 4), 16).ToUpper().PadLeft(4, '0') + pc_ind +
+            return ((Convert.ToString((insn_list.Count() * 4), 16).ToUpper().PadLeft(4, '0') + pc_ind +
                                     Convert.ToString(insn, 16).ToUpper().PadLeft(8, '0') + " " + insn_name.PadRight(8, ' ') + " " + operands));
         }
         private void createMemoryList()
@@ -935,6 +951,24 @@ namespace WindowsFormsApp1
                 mem_list[memory_row / 16] = values;
             }
             listbox_memory.DataSource = mem_list;
+            updateInsnList(offset, size);
+        }
+        private void updateInsnList(uint offset, uint size)
+        {
+            uint loops = 1;
+            uint insn_offset = offset - (offset % 4);
+            if ((size + (offset % 4)) > 4) //check if we're overwriting two instructions
+            {
+                loops = 2;
+            }
+            for (int x = 0; x < loops; x++)
+            {
+                uint insn = BitConverter.ToUInt32(memory, ((int)insn_offset + (x * 4)));
+                insn_list[(int)(insn_offset + (x * 4) / 4)] = (getInsnText(insn, x, getParcel(insn)));
+            }
+            listbox_insns.DataSource = null;
+            listbox_insns.DisplayMember = "";
+            listbox_insns.DataSource = insn_list;
         }
         private short convertToInt12(short value)
         {
@@ -982,7 +1016,14 @@ namespace WindowsFormsApp1
             uint data_value;
             if (!uint.TryParse(txt.Text, System.Globalization.NumberStyles.HexNumber, null, out data_value))
             {
-                txt.Text = Convert.ToString(registers[rd], 16).ToUpper().PadLeft(8, '0');
+                if (txt.Name == "regb_pc") //PC is not part of the registers array so must be handled separately 
+                {
+                    txt.Text = Convert.ToString(reg_pc, 16).ToUpper().PadLeft(8, '0');
+                }
+                else
+                {
+                    txt.Text = Convert.ToString(registers[rd], 16).ToUpper().PadLeft(8, '0');
+                }
             }
             else if (txt.Name == "regb_x0") //x0 is set to read only, but just in case...
             {
@@ -1006,38 +1047,55 @@ namespace WindowsFormsApp1
                 txt.Text = Convert.ToString(data_value, 16).ToUpper().PadLeft(8, '0');
             }
         }
-        private void pokeMemory(object sender, EventArgs e)
+        private void pokeMemory(object sender, EventArgs e) //used to change values in memory directly
         {
             if (file_loaded_ok)
             {
                 uint offset;
                 uint val;
+                uint byte_length = 0;
                 if (uint.TryParse(poke_addr.Text, System.Globalization.NumberStyles.HexNumber, null, out offset) &
                     uint.TryParse(poke_value.Text, System.Globalization.NumberStyles.HexNumber, null, out val))
                 {
-                    if (offset < MEMORY_SIZE) //NOTE: does not consider the length of val, which will crash if you try to poke the last memory address. fix this later!
+                    for (int x = 3; x > -2; x--) //this loop measures the length of the value with a decrementing index
                     {
-                        if ((byte)val == val) //value entered was 8-bit
+                        if (((val >> (8 * x)) & 0xFF) != 0) // it starts by checking for 32-bit values by shifting by (8 * x), then 24 bit, 
                         {
-                            memory[offset] = (byte)val;
-                            updateMemoryList(offset, 1);
+                            byte_length = (uint)x + 1;
+                            break;
                         }
-                        else if ((ushort)val == val) //value entered was 16-bit
+                        if (x == -1) //make sure it's sane
                         {
-                            memory[offset] = (byte)(val & 0xFF);
-                            memory[offset + 1] = (byte)((val & 0xFF00) >> 8);
-                            updateMemoryList(offset, 2);
-                        }
-                        else
-                        {
-                            memory[offset] = (byte)(val & 0xFF);
-                            memory[offset + 1] = (byte)((val & 0xFF00) >> 8);
-                            memory[offset + 2] = (byte)((val & 0xFF0000) >> 16);
-                            memory[offset + 3] = (byte)((val & 0xFF000000) >> 24);
-                            updateMemoryList(offset, 4);
+                            throw new Exception("Somehow, our byte length was not determined in the loop. val = 0x" + Convert.ToString(val, 16).ToUpper());
                         }
                     }
+                    if (offset + byte_length <= MEMORY_SIZE) //NOTE: does not consider the length of val, which will crash if you try to poke the last memory address with a larger value. fix this later!
+                    {
+                        memory[offset] = (byte)val; //value entered was 8-bit
+                        if (byte_length >= 2) //value entered was 16-bit
+                        {
+                            memory[offset + 1] = (byte)((val & 0xFF00) >> 8);
+                        }
+                        if (byte_length >= 3) //value entered was 24-bit
+                        {
+                            memory[offset + 2] = (byte)((val & 0xFF0000) >> 16);
+                        }
+                        if (byte_length == 4) //value entered was 32-bit
+                        {
+                            memory[offset + 3] = (byte)((val & 0xFF000000) >> 24);
+                        }
+                        updateMemoryList(offset, byte_length);
+                        updateUIBar("Successfully poked address 0x" + Convert.ToString(offset, 16).ToUpper().PadLeft(4, '0') + " with value 0x" + Convert.ToString(val, 16).ToUpper(), LIGHT_GREEN);
+                    }
                 }
+                else
+                {
+                    updateUIBar("Cannot poke memory. Ensure that both the address and value are valid hex strings.", LIGHT_RED);
+                }
+            }
+            else
+            {
+                updateUIBar("Cannot poke memory before file is loaded.", LIGHT_RED);
             }
         }
         private void updateRegister(int rd, uint val) //just a helper function so that I don't fuck things up
@@ -1098,7 +1156,26 @@ namespace WindowsFormsApp1
         {
             break_after_execution = true;
             do_not_increment_pc = true;
-            Console.WriteLine(message); //change this to a non-console display later
+            updateMessageThreaded(message, LIGHT_RED); //change this to a non-console display later
+        }
+        private void updateMessageThreaded(string message, Color colour) //if we need to call the message handler on the processing thread, it needs to be done a little differently
+        {
+            message_string = message;
+            message_colour = colour;
+            message_waiting = true;
+        }
+        private void updateUIBar(string message, Color colour)
+        {
+            lab_text_output.Text = message;
+            lab_text_output.BackColor = colour;
+            ui_timer.Interval = 2000; //ms
+            ui_timer.AutoReset = true;
+            ui_timer.Elapsed += new ElapsedEventHandler(TimerOver);
+            ui_timer.Start();
+        }
+        private void TimerOver(object sender, ElapsedEventArgs e)
+        {
+            lab_text_output.BackColor = SystemColors.Control;
         }
         private uint signExtend(uint value, int size) //truncate a value to the selected size then sign extend it
         {
@@ -1118,7 +1195,7 @@ namespace WindowsFormsApp1
             }
             else
             {
-                Console.WriteLine("Sign extend must use 8 or 16 bit values");
+                throw new Exception("Sign extend must use 8 or 16 bit values");
             }
             return value;
         }

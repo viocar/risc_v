@@ -108,6 +108,7 @@
             this.poke_addr = new System.Windows.Forms.TextBox();
             this.lab_addr = new System.Windows.Forms.Label();
             this.lab_value = new System.Windows.Forms.Label();
+            this.lab_text_output = new System.Windows.Forms.Label();
             this.grp_registers.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -814,10 +815,12 @@
             // 
             // listbox_stack
             // 
+            this.listbox_stack.Font = new System.Drawing.Font("Courier New", 9.75F);
             this.listbox_stack.FormattingEnabled = true;
+            this.listbox_stack.ItemHeight = 16;
             this.listbox_stack.Location = new System.Drawing.Point(568, 475);
             this.listbox_stack.Name = "listbox_stack";
-            this.listbox_stack.Size = new System.Drawing.Size(228, 186);
+            this.listbox_stack.Size = new System.Drawing.Size(228, 180);
             this.listbox_stack.TabIndex = 1;
             // 
             // listbox_memory
@@ -886,7 +889,7 @@
             // 
             // button_poke
             // 
-            this.button_poke.Location = new System.Drawing.Point(802, 638);
+            this.button_poke.Location = new System.Drawing.Point(802, 632);
             this.button_poke.Name = "button_poke";
             this.button_poke.Size = new System.Drawing.Size(91, 23);
             this.button_poke.TabIndex = 8;
@@ -897,25 +900,25 @@
             // poke_value
             // 
             this.poke_value.Font = new System.Drawing.Font("Courier New", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.poke_value.Location = new System.Drawing.Point(817, 610);
+            this.poke_value.Location = new System.Drawing.Point(817, 604);
             this.poke_value.Name = "poke_value";
             this.poke_value.Size = new System.Drawing.Size(76, 22);
             this.poke_value.TabIndex = 66;
-            this.poke_value.Text = "00000000";
+            this.poke_value.Text = "Value";
             // 
             // poke_addr
             // 
             this.poke_addr.Font = new System.Drawing.Font("Courier New", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.poke_addr.Location = new System.Drawing.Point(817, 582);
+            this.poke_addr.Location = new System.Drawing.Point(817, 576);
             this.poke_addr.Name = "poke_addr";
             this.poke_addr.Size = new System.Drawing.Size(76, 22);
             this.poke_addr.TabIndex = 67;
-            this.poke_addr.Text = "00000000";
+            this.poke_addr.Text = "Address";
             // 
             // lab_addr
             // 
             this.lab_addr.AutoSize = true;
-            this.lab_addr.Location = new System.Drawing.Point(802, 586);
+            this.lab_addr.Location = new System.Drawing.Point(802, 580);
             this.lab_addr.Name = "lab_addr";
             this.lab_addr.Size = new System.Drawing.Size(14, 13);
             this.lab_addr.TabIndex = 68;
@@ -924,17 +927,26 @@
             // lab_value
             // 
             this.lab_value.AutoSize = true;
-            this.lab_value.Location = new System.Drawing.Point(802, 614);
+            this.lab_value.Location = new System.Drawing.Point(802, 608);
             this.lab_value.Name = "lab_value";
             this.lab_value.Size = new System.Drawing.Size(14, 13);
             this.lab_value.TabIndex = 69;
             this.lab_value.Text = "V";
             // 
+            // lab_text_output
+            // 
+            this.lab_text_output.Location = new System.Drawing.Point(12, 658);
+            this.lab_text_output.Name = "lab_text_output";
+            this.lab_text_output.Size = new System.Drawing.Size(782, 13);
+            this.lab_text_output.TabIndex = 71;
+            this.lab_text_output.Text = "Waiting for file";
+            // 
             // risc_v
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(897, 670);
+            this.ClientSize = new System.Drawing.Size(897, 673);
+            this.Controls.Add(this.lab_text_output);
             this.Controls.Add(this.lab_value);
             this.Controls.Add(this.lab_addr);
             this.Controls.Add(this.poke_addr);
@@ -1039,6 +1051,7 @@
         private System.Windows.Forms.TextBox poke_addr;
         private System.Windows.Forms.Label lab_addr;
         private System.Windows.Forms.Label lab_value;
+        private System.Windows.Forms.Label lab_text_output;
     }
 }
 
