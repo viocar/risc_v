@@ -61,6 +61,7 @@ namespace WindowsFormsApp1
         uint[] registers = new uint[0x20]; //x0 through x31
         uint old_pc = 0; //the previous PC value is tracked for visual reasons and it's in the global space because I can't code properly I guess
         uint reg_pc = 0; //pc register, which is not part of the normal registers array
+        uint versions = 0b1; //from right to left, M A F D Q L C B J T P V N. I probably won't implement any of these but M
         string[] reg_names; //tracks which registers names we're using
 
         //UI MESSAGE GLOBALS - this is probably a bad way to do it :/
@@ -200,7 +201,7 @@ namespace WindowsFormsApp1
             uint opcode = insn & 0x7F;
             switch (opcode) //there are six instruction types. there's no easy way to know which is which beforehand, so use a switch statement to get the right one. should this be an if?
             {
-                case 0x33: //ADD SUB SLL SLT SLTU XOR XRL SRA OR AND
+                case 0x33: //ADD SUB SLL SLT SLTU XOR XRL SRA OR AND | M: MUL MULH MULHSU MULHU DIV DIVU REM REMU
                     return decodeInsn(insn, INSN_TYPE.R);
                 case 0x3:  //LB LH LW LBU LHU
                 case 0x67: //JALR
@@ -319,7 +320,60 @@ namespace WindowsFormsApp1
             switch (opcode) //there are six instruction types. there's no easy way to know which is which beforehand, so use a switch statement to get the right one. should this be an if?
             {
                 case 0x33: //ADD SUB SLL SLT SLTU XOR XRL SRA OR AND
-                    if (funct3 == 0)
+                    if (funct7 == 0x1) //M: MUL MULH MULHSU MULHU DIV DIVU REM REMU
+                    {
+                        if ((versions & 0x1) == 0)
+                        {
+                            illegalInstruction("Attempted to execute disabled M-extension instruction at 0x" + Convert.ToString(reg_pc, 16).ToUpper().PadLeft(4, '0'));
+                        }
+                        else if (funct3 == 0) //MUL
+                        {
+                            updateRegister(rd, (op1 * op2));
+                        }
+                        else if (funct3 == 0x1) //MULH
+                        {
+                            updateRegister(rd, (uint)(((long)(int)op1 * (long)(int)op2) >> 32)); //jesus christ
+                        }
+                        else if (funct3 == 0x2) //MULHSU
+                        {
+                            updateRegister(rd, (uint)(((long)(int)op1 * (long)op2) >> 32)); //the multiplicand is signed and the multiplier is unsigned. I think this is right?
+                        }
+                        else if (funct3 == 0x3) //MULHU
+                        {
+                            updateRegister(rd, (uint)(((ulong)op1 * (ulong)op2) >> 32));
+                        }
+                        else if (funct3 == 0x4) //DIV
+                        {
+                            if (op2 != 0)
+                            {
+                                updateRegister(rd, (uint)((int)op1 / (int)op2));
+                            }
+                            else
+                            {
+                                illegalInstruction("Instruction at 0x" + Convert.ToString(reg_pc, 16).ToUpper().PadLeft(4, '0') + " attempted to divide by zero.");
+                            }
+                        }
+                        else if (funct3 == 0x5) //DIVU
+                        {
+                            if (op2 != 0)
+                            {
+                                updateRegister(rd, op1 / op2);
+                            }
+                            else
+                            {
+                                illegalInstruction("Instruction at 0x" + Convert.ToString(reg_pc, 16).ToUpper().PadLeft(4, '0') + " attempted to divide by zero.");
+                            }
+                        }
+                        else if (funct3 == 0x6) //REM
+                        {
+                            updateRegister(rd, (uint)((int)op1 % (int)op2));
+                        }
+                        else //REMU
+                        {
+                            updateRegister(rd, op1 % op2);
+                        }
+                    }
+                    else if (funct3 == 0)
                     {
                         if (funct7 == 0) //ADD
                         {
@@ -612,7 +666,48 @@ namespace WindowsFormsApp1
                 }
                 else if (opcode == 0x33) //ADD SUB SLL SLT SLTU XOR SRL SRA OR AND
                 {
-                    if (funct3 == 0)
+                    if (funct7 == 0x1) //M: MUL MULH MULHSU MULHU DIV DIVU REM REMU
+                    {
+                        if ((versions & 0x1) == 0) //M extension must be enabled - otherwise, return data
+                        {
+                            insn_name = "data";
+                            operands = Convert.ToString(insn, 16);
+                        }
+                        else if (funct3 == 0)
+                        {
+                            insn_name = "mul";
+                        }
+                        else if (funct3 == 0x1)
+                        {
+                            insn_name = "mulh";
+                        }
+                        else if (funct3 == 0x2)
+                        {
+                            insn_name = "mulhsu";
+                        }
+                        else if (funct3 == 0x3)
+                        {
+                            insn_name = "mulhu";
+                        }
+                        else if (funct3 == 0x4)
+                        {
+                            insn_name = "div";
+                        }
+                        else if (funct3 == 0x5)
+                        {
+                            insn_name = "divu";
+                        }
+                        else if (funct3 == 0x6)
+                        {
+                            insn_name = "rem";
+                        }
+                        else
+                        {
+                            insn_name = "remu";
+                        }
+
+                    }
+                    else if (funct3 == 0)
                     {
                         if (funct7 == 0x20)
                         {
@@ -1138,6 +1233,9 @@ namespace WindowsFormsApp1
             code_running = !code_running;
             button_loadprog.Enabled = !button_loadprog.Enabled;
             button_step.Enabled = !button_step.Enabled;
+            button_poke.Enabled = !button_poke.Enabled;
+            poke_addr.Enabled = !poke_addr.Enabled;
+            poke_value.Enabled = !poke_value.Enabled;
             if (code_running)
             {
                 button_run.Text = "Stop";

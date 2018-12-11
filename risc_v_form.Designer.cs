@@ -109,6 +109,7 @@
             this.lab_addr = new System.Windows.Forms.Label();
             this.lab_value = new System.Windows.Forms.Label();
             this.lab_text_output = new System.Windows.Forms.Label();
+            this.cbox_ext_m = new System.Windows.Forms.CheckBox();
             this.grp_registers.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -941,11 +942,24 @@
             this.lab_text_output.TabIndex = 71;
             this.lab_text_output.Text = "Waiting for file";
             // 
+            // cbox_ext_m
+            // 
+            this.cbox_ext_m.AutoSize = true;
+            this.cbox_ext_m.Checked = true;
+            this.cbox_ext_m.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.cbox_ext_m.Location = new System.Drawing.Point(802, 122);
+            this.cbox_ext_m.Name = "cbox_ext_m";
+            this.cbox_ext_m.Size = new System.Drawing.Size(83, 17);
+            this.cbox_ext_m.TabIndex = 72;
+            this.cbox_ext_m.Text = "M extension";
+            this.cbox_ext_m.UseVisualStyleBackColor = true;
+            // 
             // risc_v
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(897, 673);
+            this.Controls.Add(this.cbox_ext_m);
             this.Controls.Add(this.lab_text_output);
             this.Controls.Add(this.lab_value);
             this.Controls.Add(this.lab_addr);
@@ -1052,6 +1066,7 @@
         private System.Windows.Forms.Label lab_addr;
         private System.Windows.Forms.Label lab_value;
         private System.Windows.Forms.Label lab_text_output;
+        private System.Windows.Forms.CheckBox cbox_ext_m;
     }
 }
 
